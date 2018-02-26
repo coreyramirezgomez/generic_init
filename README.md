@@ -10,6 +10,6 @@ Generic Init can do the following:
 	-I: Begin intialization.
 	-R: Reset setup. Remove repos and python setup.
 	-C: Check setup.
-	-G: Generate repo configuration file @ /Users/cgomez/Box_Sync/Code/generic_init/init.ini
+	-G: Generate repo configuration file @ $0 
 	-D: Enabled debugging.
 
