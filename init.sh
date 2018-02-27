@@ -42,7 +42,7 @@ generate_config()
 	if [ -f "$INIT_CONFIG" ];then
 		print -Y "Detected existing init config: $INIT_CONFIG"
 		print -Y "Moving to $INIT_CONFIG.$RUN_DATE"
-		mv -f$VERBOSE "$INIT_CONFIG" "$INIT_CONFIG.$RUN_DATE"
+		mv -f "$INIT_CONFIG" "$INIT_CONFIG.$RUN_DATE"
 	fi
 	touch "$INIT_CONFIG"
 	KEYS=(
@@ -316,7 +316,7 @@ python_init()
 		fi
 		PY_PATH="$WORK_DIR/$PYENV_NAME/bin/python"
 		if [ ! -d "$WORK_DIR/backups" ]; then
-			mkdir -p"$VERBOSE" "$WORK_DIR/backups"
+			mkdir -p "$WORK_DIR/backups"
 		fi
 		ls "$WORK_DIR" | while read line
 		do
@@ -326,7 +326,7 @@ python_init()
 					WC=$(cat $WORK_DIR/$line | wc -l | sed -e "s/^\ *//g")
 					sed -i.$RUN_DATE.$WC "1s|.*|\#\!$PY_PATH|g" "$WORK_DIR/$line"
 					print -Y "Storing backup to $WORK_DIR/backups/$line.$RUN_DATE.$WC"
-					mv -f"$VERBOSE" "$WORK_DIR/$line.$RUN_DATE.$WC" "$WORK_DIR/backups/"
+					mv -f "$WORK_DIR/$line.$RUN_DATE.$WC" "$WORK_DIR/backups/"
 					chmod +x "$WORK_DIR/$line"
 				fi
 			fi
@@ -343,7 +343,7 @@ reset_repos()
 			print -B "repo_dir: $repo_dir"
 		fi
 		if [ -d "$WORK_DIR/$repo_dir" ]; then
-			rm -rf"$VERBOSE" "$WORK_DIR/$repo_dir"
+			rm -rf "$VERBOSE" -- "$WORK_DIR/$repo_dir"
 		else
 			[ $DEBUG -eq 1 ] && print -B "Missing $WORK_DIR/$repo_dir"
 		fi
@@ -352,7 +352,7 @@ reset_repos()
 reset_python()
 {
 	if [ -d "$PYENV" ]; then
-		rm -rf"$VERBOSE" "$PYENV"
+		rm -rf "$VERBOSE" -- "$PYENV"
 	fi
 	if [ -d "$WORK_DIR/backups" ];then
 		ls "$WORK_DIR/backups" | while read line
@@ -374,7 +374,7 @@ reset_python()
 				diff "$WORK_DIR/$OFN" "$WORK_DIR/backups/$line"
 			else
 				[ $DEBUG -eq 1 ] && print -B "Line count for $line ($OWC) equals line count for $OFN ($WC)"
-				cp -f"$VERBOSE" "$WORK_DIR/backups/$line" "$WORK_DIR/$OFN"
+				cp -f "$WORK_DIR/backups/$line" "$WORK_DIR/$OFN"
 			fi
 		done
 	fi
@@ -464,8 +464,8 @@ else
 			"G") generate_config ;;
 			"D")
 				DEBUG=1
-				VERBOSE="v"
-				QUIET=""
+				VERBOSE="-v"
+				QUIET="$VERBOSE"
 				;;
 			"*")
 				print -Y "Unrecognized arguments: $opt"
