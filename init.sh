@@ -323,7 +323,6 @@ python_init()
 			if [ -f "$WORK_DIR/$line" ]; then
 				if [[ "$(head -1 "$WORK_DIR/$line")" == "#!/usr/bin/python" ]]; then
 					print -Y "Detected python file, modifiying shebang to $PY_PATH"
-					print -Y "Storing backup to $WORK_DIR/backups/$line.$RUN_DATE.$WC"
 					WC=$(cat $WORK_DIR/$line | wc -l | sed -e "s/^\ *//g")
 					sed -i.$RUN_DATE.$WC "1s|.*|\#\!$PY_PATH|g" "$WORK_DIR/$line"
 					print -Y "Storing backup to $WORK_DIR/backups/$line.$RUN_DATE.$WC"
