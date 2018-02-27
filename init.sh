@@ -357,8 +357,10 @@ reset_python()
 	if [ -d "$WORK_DIR/backups" ];then
 		ls "$WORK_DIR/backups" | while read line
 		do
-			OFN="${line%%.*}"
-			OWC=${line##*.}
+			OWC="$(echo $line | rev | cut -d . -f1 | rev)"
+			FDATE="$(echo $line | rev | cut -d . -f2 | rev)"
+			OFN="${line/.$OWC/}"
+			OFN="${OFN/.$FDATE/}"
 			[ $DEBUG -eq 1 ] && echo "$WORK_DIR/backups/$line line count = $OWC. Old file name: $OFN"
 			if [ ! -f $WORK_DIR/$OFN ]; then
 				print -R "$WORK_DIR/$OFN is missing! Restoring from backups."
