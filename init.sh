@@ -437,7 +437,7 @@ failure_exit()
 }
 success_exit()
 {
-	[ $DEBUG -eq 1 ] && print -G "Exiting with no errors."
+	print -G "Exiting with no errors."
 }
 #### Main Run ####
 if [ $# -lt 1 ]; then
