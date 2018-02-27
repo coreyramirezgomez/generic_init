@@ -443,6 +443,7 @@ if [ $# -lt 1 ]; then
 	print -R "Missing arguments."
 	usage
 else
+	load_config
 	check_requirements "${REQUIRED_PKGS[@]}"
 	if [ $? -gt 0 ];then
 		print -R "Missing $? required binary package(s)."
