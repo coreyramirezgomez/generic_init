@@ -212,7 +212,7 @@ check_repo_init()
 				case "$reply" in
 					"N" | "n")
 						print -Y "Skipping repo init."
-						exit 1
+						break
 						;;
 					"Y" | "y")
 						print -G "Starting repo init."
@@ -283,7 +283,7 @@ check_python_init()
 			case "$reply" in
 				"N" | "n")
 					print -Y "Skipping python init."
-					exit 1
+					break
 					;;
 				"Y" | "y")
 					print -G "Starting python init."
