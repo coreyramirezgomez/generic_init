@@ -11,9 +11,11 @@ DEBUG=0
 VERBOSE=""
 QUIET="-q"
 FORCE_FLAG=0
-REQUIRED_PKGS=( 'python' 'virtualenv' 'git' )
+REQUIRED_PKGS=( 'cut' 'rev' )
 OPTIONAL_PKGS=( )
 GIT_REPOS=( )
+PY_INIT=0
+GIT_INIT=0
 PYENV_NAME="pyenv"
 PYENV="$WORK_DIR/$PYENV_NAME"
 PIP_TXT="$WORK_DIR/requirements.txt"
@@ -31,7 +33,15 @@ load_config()
 	while read KEY VALUE
 	do
 		case "$KEY" in
-			"REPO" | "REPOS") GIT_REPOS=( ${GIT_REPOS[@]} "$VALUE" ) ;;
+			"REPO" | "REPOS")
+				GIT_REPOS=( ${GIT_REPOS[@]} "$VALUE" )
+				GIT_INIT=1
+				REQUIRED_PKGS=( ${REQUIRED_PKGS[@]} 'git' )
+				;;
+			"PY_INIT" )
+				PY_INIT=1
+				REQUIRED_PKGS=( ${REQUIRED_PKGS[@]} 'python' 'virtualenv' )
+				;;
 		*) echo "Unrecognized Key: $KEY" ;;
 	esac
 	done < "$INIT_CONFIG"
@@ -47,35 +57,57 @@ generate_config()
 	touch "$INIT_CONFIG"
 	KEYS=(
 	"REPO"
+	"PY_INIT"
 	)
 	for k in "${KEYS[@]}"
 	do
 		INPUT=""
-		echo "---------------- $k ----------------"
+		print -B -S "---------------- $k ----------------"
 		case "$k" in
 			"REPO")
-			while :
-			do
-				echo -n "Set repo-url to clone (Leave blank to continue): "
-				read INPUT
-				if [[ "$INPUT" != "" ]];then
-					repo_url="$INPUT"
-					echo "---------------- REPO-DIR ----------------"
-					repo_dir="$(echo $INPUT | rev | cut -d \/ -f1 | rev)"
-					echo -n "Set directory to clone repo to (Leave blank for default=$repo_dir): "
+				while :
+				do
+					print -Y -n "Set repo-url to clone (Leave blank to continue): "
 					read INPUT
-					[[ "$INPUT" != "" ]] && repo_dir="$INPUT"
-					echo "---------------- REPO-INIT ----------------"
-					repo_init=""
-					echo -n "Set the init command (Ex: init.sh -I) (Leave blank to skip): "
-					read INPUT
-					[[ "$INPUT" != "" ]] && repo_init="$INPUT"
-					echo "$k=$repo_url|$repo_dir|$repo_init" >> "$INIT_CONFIG"
-				else
-					break
-				fi
-			done
-			;;
+					if [[ "$INPUT" != "" ]];then
+						repo_url="$INPUT"
+						print -B -S "---------------- REPO-DIR ----------------"
+						repo_dir="$(echo $INPUT | rev | cut -d \/ -f1 | rev)"
+						print -Y -n "Set directory to clone repo to (Leave blank for default=$repo_dir): "
+						read INPUT
+						[[ "$INPUT" != "" ]] && repo_dir="$INPUT"
+						print -B -S "---------------- REPO-INIT ----------------"
+						repo_init=""
+						print -Y -n "Set the init command (Ex: init.sh -I) (Leave blank to skip): "
+						read INPUT
+						[[ "$INPUT" != "" ]] && repo_init="$INPUT"
+						echo "$k=$repo_url|$repo_dir|$repo_init" >> "$INIT_CONFIG"
+					else
+						break
+					fi
+				done
+				;;
+			"PY_INIT")
+				[ $FORCE_FLAG -eq 1 ] && INPUT="y"
+				while :
+				do
+					case "$INPUT" in
+						"N" | "n")
+							echo "$k=0" >> "$INIT_CONFIG"
+							break
+							;;
+						"Y" | "y")
+							echo "$k=1" >> "$INIT_CONFIG"
+							break
+							;;
+						*)
+							print -Y -n "Initialize a virtualenv with python if $PIP_TXT exists? (Y/N): "
+							read -n 1 INPUT
+							echo ""
+							;;
+						esac
+				done
+				;;
 		esac
 	done
 }
@@ -192,7 +224,7 @@ check_requirements()
 	done
 	return $missing
 }
-check_repo_init()
+repo_chek()
 {
 	missing=0
 	for r in "${GIT_REPOS[@]}"
@@ -263,7 +295,7 @@ repo_init()
 		fi
 	done
 }
-check_python_init()
+python_check()
 {
 	missing=0
 	if [ ! -d "$PYENV" ]; then
@@ -333,7 +365,7 @@ python_init()
 		done
 	fi
 }
-reset_repos()
+repo_reset()
 {
 	for r in "${GIT_REPOS[@]}"
 	do
@@ -349,7 +381,7 @@ reset_repos()
 		fi
 	done
 }
-reset_python()
+python_reset()
 {
 	if [ -d "$PYENV" ]; then
 		rm -rf "$VERBOSE" -- "$PYENV"
@@ -379,24 +411,6 @@ reset_python()
 		done
 	fi
 }
-reset_all()
-{
-	[ $DEBUG -eq 1 ] && print -B "Executing reset_all"
-	reset_repos
-	reset_python
-}
-check_all_inits()
-{
-	[ $DEBUG -eq 1 ] && print -B "Executing check_all_inits"
-	check_repo_init
-	check_python_init
-}
-init_all()
-{
-	[ $DEBUG -eq 1 ] && print -B "Executing init_all"
-	repo_init
-	python_init
-}
 usage()
 {
 	echo ""
@@ -406,30 +420,28 @@ usage()
 	echo "		-R: Reset setup. Remove repos and python setup."
 	echo "		-C: Check setup."
 	echo "		-G: Generate repo configuration file @ $INIT_CONFIG"
+	echo "		-F: Force=\"Y\" for all questions."
 	echo "		-D: Enabled debugging."
 	echo ""
 }
 #### Project Specific Functions ####
 init()
 {
-	[ $DEBUG -eq 1 ] && print -B "Place custom init procedures along with init templates above"
-	#init_all
-	#repo_init
-	#python_init
+	[ $DEBUG -eq 1 ] && print -B "Place custom init procedures here."
+	[ $GIT_INIT -eq 1 ] && repo_init
+	[ $PY_INIT -eq 1 ] && python_init
 }
 reset()
 {
-	[ $DEBUG -eq 1 ] && print -B "Place custom reset procedures here along with reset templates above"
-	#reset_all
-	#reset_repos
-	#reset_python
+	[ $DEBUG -eq 1 ] && print -B "Place custom reset procedures here."
+	[ $GIT_INIT -eq 1 ] && repo_reset
+	[ $PY_INIT -eq 1 ] && python_reset
 }
 check()
 {
-	[ $DEBUG -eq 1 ] && print -B "Place custom check procedures here along with check templates above"
-	#check_all_inits
-	#check_repo_init
-	#check_python_init
+	[ $DEBUG -eq 1 ] && print -B "Place custom check procedures here."
+	[ $GIT_INIT -eq 1 ] && repo_check
+	[ $PY_INIT -eq 1 ] && python_check
 }
 failure_exit()
 {
@@ -454,7 +466,7 @@ else
 	if [ $? -gt 0 ]; then
 		print -Y "Missing $? optional binary package(s). Will Skip setup procedures which require them."
 	fi
-	while getopts "hIRCGD" opt
+	while getopts "hIRCGFD" opt
 	do
 		case "$opt" in
 			"h") usage ;;
@@ -462,6 +474,7 @@ else
 			"R") reset ;;
 			"C") check ;;
 			"G") generate_config ;;
+			"F") FORCE_FLAG=1 ;;
 			"D")
 				DEBUG=1
 				VERBOSE="-v"
