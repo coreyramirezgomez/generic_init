@@ -277,7 +277,7 @@ repo_init()
 		fi
 		[[ "$repo_dir" == "" ]] && repo_dir="$(echo $repo_url | rev | cut -d \/ -f1 | rev)"
 		if [ -d "$repo_dir" ]; then
-			cd "$WORK_DIR/pkgs/$repo_dir"
+			cd "$WORK_DIR/$repo_dir"
 			git pull "$QUIET"
 			git_succeed=$?
 		else
