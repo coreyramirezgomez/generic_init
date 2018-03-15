@@ -28,10 +28,11 @@ load_config()
 		print -R "Missing init config: $INIT_CONFIG"
 		return 0
 	fi
-	OIFS="$IFS"
-	IFS="="
-	while read KEY VALUE
+	while read CONF_LINE
 	do
+		[[ "${CONF_LINE:0:1}" == "#" ]] && continue
+		KEY=$(echo $CONF_LINE | cut -d= -f1)
+		VALUE=$(echo $CONF_LINE | cut -d= -f2)
 		case "$KEY" in
 			"REPO" | "REPOS")
 				GIT_REPOS=( ${GIT_REPOS[@]} "$VALUE" )
@@ -39,13 +40,12 @@ load_config()
 				REQUIRED_PKGS=( ${REQUIRED_PKGS[@]} 'git' )
 				;;
 			"PY_INIT" )
-				PY_INIT=1
+				PY_INIT=$VALUE
 				REQUIRED_PKGS=( ${REQUIRED_PKGS[@]} 'python' 'virtualenv' )
 				;;
-		*) echo "Unrecognized Key: $KEY" ;;
-	esac
+				*) echo "Unrecognized Key: $KEY" ;;
+		esac
 	done < "$INIT_CONFIG"
-	IFS="$OIFS"
 }
 generate_config()
 {
@@ -208,7 +208,7 @@ print()
 check_requirements()
 {
 	if [ $# -lt 1 ];then
-		print -R "No binary package list to check."
+		[ $DEBUG -eq 1 ] && print -R "No binary package list to check."
 		return 0
 	fi
 	missing=0
