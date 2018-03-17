@@ -30,9 +30,25 @@ load_config()
 	fi
 	while read CONF_LINE
 	do
-		[[ "${CONF_LINE:0:1}" == "#" ]] && continue
-		KEY=$(echo $CONF_LINE | cut -d= -f1)
-		VALUE=$(echo $CONF_LINE | cut -d= -f2)
+		[[ "${CONF_LINE:0:1}" == "#" ]] || [[ "${CONF_LINE:0:1}" == ";" ]] && continue
+		value_count=$(echo $CONF_LINE | tr -dc '=' | wc -l)
+		KEY=""
+		VALUE=""
+		index=0
+		while [ $index -lt $value_count ]
+		do
+			case $index in
+				0) KEY="$(echo $CONF_LINE | cut -d= -f$index)" ;;
+				*)
+					if [[ "$VALUE" == "" ]]; then
+						VALUE="$(echo $CONF_LINE | cut -d= -f$index)"
+					else
+						VALUE="$VALUE=$(echo $CONF_LINE | cut -d= -f$index)"
+					fi
+					;;
+				esac
+				((index++))
+		done
 		case "$KEY" in
 			"REPO" | "REPOS")
 				GIT_REPOS=( ${GIT_REPOS[@]} "$VALUE" )
@@ -123,6 +139,24 @@ print()
 		Purple='\033[0;35m'       # Purple
 		Cyan='\033[0;36m'         # Cyan
 		White='\033[0;37m'        # White
+		# Bold
+		BBlack='\033[1;30m'       # Black
+		BRed='\033[1;31m'         # Red
+		BGreen='\033[1;32m'       # Green
+		BYellow='\033[1;33m'      # Yellow
+		BBlue='\033[1;34m'        # Blue
+		BPurple='\033[1;35m'      # Purple
+		BCyan='\033[1;36m'        # Cyan
+		BWhite='\033[1;37m'       # White
+		# Background
+		On_Black='\033[40m'       # Black
+		On_Red='\033[41m'         # Red
+		On_Green='\033[42m'       # Green
+		On_Yellow='\033[43m'      # Yellow
+		On_Blue='\033[44m'        # Blue
+		On_Purple='\033[45m'      # Purple
+		On_Cyan='\033[46m'        # Cyan
+		On_White='\033[47m'       # White
 		NC='\033[m'               # Color Reset
 	else
 		Black='\e[0;30m'        # Black
@@ -133,48 +167,107 @@ print()
 		Purple='\e[0;35m'       # Purple
 		Cyan='\e[0;36m'         # Cyan
 		White='\e[0;37m'        # White
+		# Bold
+		BBlack='\e[1;30m'       # Black
+		BRed='\e[1;31m'         # Red
+		BGreen='\e[1;32m'       # Green
+		BYellow='\e[1;33m'      # Yellow
+		BBlue='\e[1;34m'        # Blue
+		BPurple='\e[1;35m'      # Purple
+		BCyan='\e[1;36m'        # Cyan
+		BWhite='\e[1;37m'       # White
+		# Background
+		On_Black='\e[40m'       # Black
+		On_Red='\e[41m'         # Red
+		On_Green='\e[42m'       # Green
+		On_Yellow='\e[43m'      # Yellow
+		On_Blue='\e[44m'        # Blue
+		On_Purple='\e[45m'      # Purple
+		On_Cyan='\e[46m'        # Cyan
+		On_White='\e[47m'       # White
 		NC="\e[m"               # Color Reset
 	fi
-	colors=( "$Red" "$Green" "$Gellow" "$Blue" "$Purple" "$Cyan" )
-	local DEBUG=0
-	if which printf >&/dev/null; then
-		PRINTF_E=0
+	if which cowsay >&/dev/null; then
+		local CS="$(which cowsay)"
 	else
-		PRINTF_E=1
+		local CS=""
 	fi
-	FGND=""
-	NL=1
-	PNL=0
-	STRING=" "
-	while getopts "f:npKRGYBPCWS:" opt
+	if which figlet >&/dev/null; then
+		local FIG="$(which figlet)"
+	else
+		local FIG=""
+	fi
+	if which printf >&/dev/null; then
+		local PRINTF_E=0
+	else
+		local PRINTF_E=1
+	fi
+	local DEBUG=0
+	local FGND=""
+	local BKGN=""
+	local BOLD=0
+	local NL=1
+	local PNL=0
+	local STRING=" "
+	local STYLE=""
+	local POS=0
+	local RAINBOW=0
+	local ERR_OUT=0
+	while getopts "f:b:IcnpFAKRGYBPCWvS:" cprint_opt
 	do
-		case "$opt" in
+		case "$cprint_opt" in
 			"f")					# Set foreground/text color.
 				case "$OPTARG" in
-					"black") FGND="$Black";;
-					"red") FGND="$Red";;
-					"green") FGND="$Green";;
-					"yellow") FGND="$Yellow";;
-					"blue") FGND="$Blue";;
-					"purple") FGND="$Purple";;
-					"cyan") FGND="$Cyan";;
-					"white") FGND="$White";;
-					"*") [ $DEBUG -eq 1 ] && echo "Unrecognized Arguement: $OPTARG" ;;
+					"black") [ $BOLD -eq 0 ] && FGND="$Black" || FGDN="$BBlack" ;;
+					"red") [ $BOLD -eq 0 ] && FGND="$Red" || FGND="$BRed" ;;
+					"green") [ $BOLD -eq 0 ] && FGND="$Green" || FGND="$BGreen" ;;
+					"yellow") [ $BOLD -eq 0 ] && FGND="$Yellow" || FGND="$BYellow" ;;
+					"blue") [ $BOLD -eq 0 ] && FGND="$Blue" || FGND="$BBlue" ;;
+					"purple") [ $BOLD -eq 0 ] && FGND="$Purple" || FGND="$BPurple" ;;
+					"cyan") [ $BOLD -eq 0 ] && FGND="$Cyan" || FGND="$BCyan" ;;
+					"white") [ $BOLD -eq 0 ] && FGND="$White" || FGND="$BWhite" ;;
+					"*") [ $DEBUG -eq 1 ] && (>&2 echo "Unrecognized Arguement: $OPTARG") ;;
 				esac
 				;;
+			"b")					# Set background color.
+				case "$OPTARG" in
+					"black") BKGN="$On_Black" ;;
+					"red") BKGN="$On_Red" ;;
+					"green") BKGN="$On_Green" ;;
+					"yellow") BKGN="$On_Yellow" ;;
+					"blue") BKGN="$On_Blue" ;;
+					"purple") BKGN="$On_Purple" ;;
+					"cyan") BKGN="$On_Cyan" ;;
+					"white") BKGN="$On_White" ;;
+					"*") [ $DEBUG -eq 1 ] && (>&2 echo "Unrecognized Arguement: $OPTARG") ;;
+				esac
+				;;
+			"I") BOLD=1 ;;				# Enable bold text.
+			"c")
+				local WIDTH=0
+				local POS=0
+				WIDTH=$(tput cols)					# Current screen width
+				if [ $WIDTH -le 80 ]; then
+					POS=0
+				else
+					POS=$((( $WIDTH - 80 ) / 2 ))		# Middle of screen based on screen width
+				fi
+				;;				# Center the text in screen.
 			"n") NL=0 ;;	 			# Print with newline.
 			"p") ((PNL++)) ;; 			# Prepend with newline.
-			"K") FGND="$Black";;
-			"R") FGND="$Red";;
-			"G") FGND="$Green";;
-			"Y") FGND="$Yellow";;
-			"B") FGND="$Blue";;
-			"P") FGND="$Purple";;
-			"C") FGND="$Cyan";;
-			"W") FGND="$White";;
-			"D") local DEBUG=1 ;;
+			"F") [ -f "$FIG" ] && STYLE="$FIG" ;;
+			"A") [ -f "$CS" ] && STYLE="$CS" ;;
+			"K") [ $BOLD -eq 0 ] && FGND="$Black" ||  FGDN="$BBlack" ;;
+			"R") [ $BOLD -eq 0 ] && FGND="$Red" || FGND="$BRed" ;;
+			"G") [ $BOLD -eq 0 ] && FGND="$Green" || FGND="$BGreen" ;;
+			"Y") [ $BOLD -eq 0 ] && FGND="$Yellow" || FGND="$BYellow" ;;
+			"B") [ $BOLD -eq 0 ] && FGND="$Blue" || FGND="$BBlue" ;;
+			"P") [ $BOLD -eq 0 ] && FGND="$Purple" || FGND="$BPurple" ;;
+			"C") [ $BOLD -eq 0 ] && FGND="$Cyan" || FGND="$BCyan" ;;
+			"W") [ $BOLD -eq 0 ] && FGND="$White" || FGND="$BWhite";;
+			"v") DEBUG=1 ;;
 			"S") STRING="$OPTARG" ;;
-			"*") [ $DEBUG -eq 1 ] && echo "Unknown Arguement: $opt" ;;
+			"*") [ $DEBUG -eq 1 ] && (>&2 echo "Unknown Arguement: $opt") ;;
 		esac
 	done
 	if [[ "$STRING" == " " ]];then
@@ -182,27 +275,104 @@ print()
 		STRING="$@"
 	fi
 	if [ $DEBUG -eq 1 ]; then
-		echo "FGND: $FGND"
-		echo "NL: $NL"
-		echo "PNL: $PNL"
-		echo "STRING: $STRING"
+		(>&2 echo "FGND: $FGND")
+		(>&2 echo "BKGN: $BKGN")
+		(>&2 echo "BOLD: $BOLD")
+		(>&2 echo "NL: $NL")
+		(>&2 echo "PNL: $PNL")
+		(>&2 echo "POS: $POS")
+		(>&2 echo "STYLE: $STYLE")
+		(>&2 echo "RAINBOW: $RAINBOW")
+		(>&2 echo "PRINTF_E: $PRINTF_E")
+		(>&2 echo "ERR_OUT: $ERR_OUT")
+		(>&2 echo "STRING: $STRING")
 	fi
+	#process_prenl()
 	while [ $PNL -ne 0 ]
 	do
 		if [ $PRINTF_E -eq 0 ];then
-			printf "\n"
+			if [ $ERR_OUT -eq 1 ]; then
+				(>&2 printf "\n")
+			else
+				printf "\n"
+			fi
 		else
-			echo ""
+			if [ $ERR_OUT -eq 1 ]; then
+				(>&2 echo "")
+			else
+				echo ""
+			fi
 		fi
 		((PNL--))
 	done
-	[ ! -z $FGND ] && STRING="$FGND$STRING$NC"
-	if [ $PRINTF_E -eq 0 ];then
-		printf -- "$STRING"
-		[ $NL -eq 1 ] && printf "\n"
+	#process_string()
+	string_proc="$STRING"
+	[ ! -z $STYLE ] && string_proc="$($STYLE $string_proc)"
+	if [ $POS -eq 0 ]; then
+		[ ! -z $BKGN ] && string_proc="$BKGN$string_proc"
+		if [ $RAINBOW -eq 1 ]; then
+			string_proc_r=""
+			words=($string_proc)
+			for c in "${words[@]}"
+			do
+				#random_color()
+				colors=( "$Red" "$Green" "$Gellow" "$Blue" "$Purple" "$Cyan" )
+				FGND="${colors[$RANDOM % ${#colors[@]}]}"
+				[ $DEBUG -eq 1 ] && (>&2 echo "Random seed: $RANDOM")
+				string_proc_r="$string_proc_r$FGND$c "
+			done
+			string_proc=$string_proc_r
+		else
+			[ ! -z $FGND ] && string_proc="$FGND$string_proc"
+		fi
+		[ ! -z $FGND ] || [ ! -z $BKGN ] && string_proc="$string_proc$NC"	# Append color reset if foreground/background is set.
+		if [ $PRINTF_E -eq 0 ]; then
+			if [ $ERR_OUT -eq 1 ]; then
+				(>&2 printf -- "$string_proc")
+			else
+				printf -- "$string_proc"
+			fi
+		else
+			[ $DEBUG -eq 1 ] && (>&2 echo "printf not found, reverting to echo.")
+			if [ $ERR_OUT -eq 1 ]; then
+				(>&2 echo "$string_proc")
+			else
+				echo "$string_proc"
+			fi
+		fi
 	else
-		echo "$STRING"
-		[ $NL -eq 1 ] && echo ""
+		if [ $PRINTF_E -eq 0 ]; then
+			if [ $ERR_OUT -eq 1 ]; then
+				(>&2 printf -- "$FGND$BKGN%$POS"s"$NC" "$string_proc")
+			else
+				printf -- "$FGND$BKGN%$POS"s"$NC" "$string_proc"
+			fi
+		else
+			[ $DEBUG -eq 1 ] && (>&2 "printf not found, reverting to echo.")
+			if [ $ERR_OUT -eq 1 ]; then
+				(>&2 echo "$FGND""$BKGN""$string_proc""$NC")
+			else
+				echo "$FGND""$BKGN""$string_proc""$NC"
+			fi
+		fi
+	fi
+	#process_nl()
+	if [ $PRINTF_E -eq 0 ];then
+		if [ $NL -eq 1 ]; then
+			if [ $ERR_OUT -eq 1 ]; then
+				(>&2 printf "\n")
+			else
+				printf "\n"
+			fi
+		fi
+	else
+		if [ $NL -eq 1 ]; then
+			if [ $ERR_OUT -eq 1 ]; then
+				(>&2 echo "")
+			else
+				echo ""
+			fi
+		fi
 	fi
 }
 check_requirements()
