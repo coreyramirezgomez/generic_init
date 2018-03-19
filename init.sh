@@ -14,6 +14,7 @@ FORCE_FLAG=0
 REQUIRED_PKGS=( 'cut' 'rev' )
 OPTIONAL_PKGS=( )
 GIT_REPOS=( )
+REPO_PKGS_DIR="$WORK_DIR/"
 PY_INIT=0
 GIT_INIT=0
 PYENV_NAME="pyenv"
@@ -25,30 +26,36 @@ RUN_DATE=$(date +%Y-%d-%m-%H-%M-%S)
 load_config()
 {
 	if [ ! -f "$INIT_CONFIG" ];then
-		print -R "Missing init config: $INIT_CONFIG"
+		[ $DEBUG -eq 1 ] && print -E -R "Missing init config: $INIT_CONFIG"
 		return 0
 	fi
 	while read CONF_LINE
 	do
-		[[ "${CONF_LINE:0:1}" == "#" ]] || [[ "${CONF_LINE:0:1}" == ";" ]] && continue
-		value_count=$(echo $CONF_LINE | tr -dc '=' | wc -l)
+		if [[ "${CONF_LINE:0:1}" == "#" ]] || [[ "${CONF_LINE:0:1}" == ";" ]]; then
+			[ $DEBUG -eq 1 ] && print -E -B "Skipping commented line: $CONF_LINE"
+			continue
+		fi
 		KEY=""
 		VALUE=""
 		index=0
-		while [ $index -lt $value_count ]
+		OIFS="$IFS"
+		IFS="="
+		for l in $CONF_LINE
 		do
 			case $index in
-				0) KEY="$(echo $CONF_LINE | cut -d= -f$index)" ;;
+				0) KEY="$l" ;;
 				*)
 					if [[ "$VALUE" == "" ]]; then
-						VALUE="$(echo $CONF_LINE | cut -d= -f$index)"
+						VALUE="$l"
 					else
-						VALUE="$VALUE=$(echo $CONF_LINE | cut -d= -f$index)"
+						VALUE="$VALUE=$l"
 					fi
 					;;
-				esac
-				((index++))
+			esac
+			((index++))
 		done
+		IFS="$OIFS"
+		[ $DEBUG -eq 1 ] && print -E -B "index=$index;KEY=$KEY;VALUE=$VALUE"
 		case "$KEY" in
 			"REPO" | "REPOS")
 				GIT_REPOS=( ${GIT_REPOS[@]} "$VALUE" )
@@ -59,22 +66,19 @@ load_config()
 				PY_INIT=$VALUE
 				REQUIRED_PKGS=( ${REQUIRED_PKGS[@]} 'python' 'virtualenv' )
 				;;
-				*) echo "Unrecognized Key: $KEY" ;;
+				*) [ $DEBUG -eq 1 ] && print -E -B "Unrecognized Key: $KEY" ;;
 		esac
 	done < "$INIT_CONFIG"
 }
 generate_config()
 {
 	if [ -f "$INIT_CONFIG" ];then
-		print -Y "Detected existing init config: $INIT_CONFIG"
-		print -Y "Moving to $INIT_CONFIG.$RUN_DATE"
+		print -E -Y "Detected existing init config: $INIT_CONFIG"
+		print -E -Y "Moving to $INIT_CONFIG.$RUN_DATE"
 		mv -f "$INIT_CONFIG" "$INIT_CONFIG.$RUN_DATE"
 	fi
 	touch "$INIT_CONFIG"
-	KEYS=(
-	"REPO"
-	"PY_INIT"
-	)
+	KEYS=( "REPO" "PY_INIT" )
 	for k in "${KEYS[@]}"
 	do
 		INPUT=""
@@ -378,7 +382,7 @@ print()
 check_requirements()
 {
 	if [ $# -lt 1 ];then
-		[ $DEBUG -eq 1 ] && print -R "No binary package list to check."
+		[ $DEBUG -eq 1 ] && print -E -R "No binary package list to check."
 		return 0
 	fi
 	missing=0
@@ -386,98 +390,103 @@ check_requirements()
 	for p in "${arr[@]}"
 	do
 		if which "$p"  >&/dev/null; then
-			[ $DEBUG -eq 1 ] && print -G "Found $p"
+			[ $DEBUG -eq 1 ] && print -E -G "Found $p"
 		else
-			print -Y "Missing binary package: $p"
+			print -E -Y "Missing binary package: $p"
 			((missing++))
 		fi
 	done
 	return $missing
 }
-repo_chek()
+repo_check()
 {
 	missing=0
 	for r in "${GIT_REPOS[@]}"
-		do
-			repo_dir="$(echo $r | cut -d \| -f 2)"
-			if [ ! -d "$repo_dir" ]; then
-				print -R "Missing $repo_dir."
-				((missing++))
-			fi
-		done
-		if [ $missing -gt 0 ]; then
-			print -R "Missing $missing directories."
-			reply=""
-			[ $FORCE_FLAG -eq 1 ] && reply="y"
-			while :
-			do
-				case "$reply" in
-					"N" | "n")
-						print -Y "Skipping repo init."
-						break
-						;;
-					"Y" | "y")
-						print -G "Starting repo init."
-						repo_init
-						break
-						;;
-					*)
-						print -Y -n "Would you like to setup repos now? (Y/N): "
-						read -n 1 reply
-						echo ""
-						;;
-					esac
-			done
+	do
+		repo_dir="$(echo $r | cut -d \| -f 2)"
+		if [ ! -d "$repo_dir" ]; then
+			print -E -R "Missing $repo_dir."
+			((missing++))
 		fi
+	done
+	if [ $missing -gt 0 ]; then
+		print -E -R "Missing $missing directories."
+		reply=""
+		[ $FORCE_FLAG -eq 1 ] && reply="y"
+		while :
+		do
+			case "$reply" in
+				"N" | "n")
+					print -Y "Skipping repo init."
+					break
+					;;
+				"Y" | "y")
+					print -G "Starting repo init."
+					repo_init
+					break
+					;;
+				*)
+					print -Y -n "Would you like to setup repos now? (Y/N): "
+					read -n 1 reply
+					echo ""
+					;;
+				esac
+		done
+	fi
 }
 repo_init()
 {
-	cd "$WORK_DIR"
+	mkdir -p "$REPO_PKGS_DIR"
 	git_succeed=0
 	for r in "${GIT_REPOS[@]}"
 	do
+		cd "$REPO_PKGS_DIR"
 		repo_url="$(echo $r | cut -d \| -f1)"
 		repo_dir="$(echo $r | cut -d \| -f2)"
 		repo_init="$(echo $r | cut -d \| -f3)"
 		if [ $DEBUG -eq 1 ];then
-			print -B "Executing repo init with the following: "
-			print -B "repo_url: $repo_url"
-			print -B "repo_dir: $repo_dir"
-			print -B "repo_init: $repo_init"
+			print -E -B "Executing repo init with the following: "
+			print -E -B "repo_url: $repo_url"
+			print -E -B "repo_dir: $repo_dir"
+			print -E -B "repo_init: $repo_init"
 		fi
 		[[ "$repo_dir" == "" ]] && repo_dir="$(echo $repo_url | rev | cut -d \/ -f1 | rev)"
 		if [ -d "$repo_dir" ]; then
-			cd "$WORK_DIR/$repo_dir"
+			cd "$REPO_PKGS_DIR/$repo_dir"
 			git pull "$QUIET"
 			git_succeed=$?
 		else
 			git clone "$QUIET" --depth 1 "$repo_url" "$repo_dir"
 			git_succeed=$?
 		fi
-		if [ $git_succeed -eq 0 ];then
-			if [[ "$repo_init" != "" ]];then
-				cd "$WORK_DIR/$repo_dir/"
-				$repo_init
-			fi
-			[ $? -ne 0 ] && print -R "Init command reported failure. Check output."
-		else
-			print -R "Git clone/pull failed. Skipping init command: $repo_init"
+		if [ $git_succeed -eq 0 ] && [[ "$repo_init" != "" ]]; then
+			cd "$REPO_PKGS_DIR/$repo_dir"
+			$repo_init
+			[ $? -ne 0 ] && print -E -R "Init command failed. Check output."
+		fi
+		if [ $git_succeed -ne 0 ] && [[ "$repo_init" != "" ]]; then
+			print -E -R "Git clone/pull failed. Skipping init command: $repo_init"
+		fi
+		if [ $git_succeed -ne 0 ] && [[ "$repo_init" == "" ]]; then
+			print -E -R "Git clone/pull failed."
 		fi
 	done
+	cd "$WORK_DIR"
 }
 python_check()
 {
+	cd "$WORK_DIR"
 	missing=0
 	if [ ! -d "$PYENV" ]; then
-		print -R "$PYENV not found."
+		print -E -R "$PYENV not found."
 		((missing++))
 	fi
 	if [ ! -f "$PYENV/updated" ] || [ "$PIP_TXT" -nt "$PYENV/updated" ]; then
-		print -R "Virtual Environment pacakges need to be installed/updated."
+		print -E -R "Virtual Environment pacakges need to be installed/updated."
 		((missing++))
 	fi
 	if [ $missing -gt 0 ]; then
-		print -R "Missing $missing directories."
+		print -E -R "Missing $missing directories."
 		reply=""
 		[ $FORCE_FLAG -eq 1 ] && reply="y"
 		while :
@@ -500,6 +509,7 @@ python_check()
 				esac
 			done
 	fi
+	cd "$WORK_DIR"
 }
 python_init()
 {
@@ -511,9 +521,9 @@ python_init()
 		"$PYENV/bin/pip" "$QUIET" install -r "$PIP_TXT"
 		if [ $? -eq 0 ]; then
 			touch "$PYENV/updated"
-			print -G "Requirements installed."
+			print -E -G "Requirements installed."
 		else
-			print -R "Requirements not installed."
+			print -E -R "Requirements not installed."
 			exit 1
 		fi
 		PY_PATH="$WORK_DIR/$PYENV_NAME/bin/python"
@@ -524,10 +534,10 @@ python_init()
 		do
 			if [ -f "$WORK_DIR/$line" ]; then
 				if [[ "$(head -1 "$WORK_DIR/$line")" == "#!/usr/bin/python" ]]; then
-					print -Y "Detected python file, modifiying shebang to $PY_PATH"
+					print -E -Y "Detected python file, modifiying shebang to $PY_PATH"
 					WC=$(cat $WORK_DIR/$line | wc -l | sed -e "s/^\ *//g")
 					sed -i.$RUN_DATE.$WC "1s|.*|\#\!$PY_PATH|g" "$WORK_DIR/$line"
-					print -Y "Storing backup to $WORK_DIR/backups/$line.$RUN_DATE.$WC"
+					print -E -Y "Storing backup to $WORK_DIR/backups/$line.$RUN_DATE.$WC"
 					mv -f "$WORK_DIR/$line.$RUN_DATE.$WC" "$WORK_DIR/backups/"
 					chmod +x "$WORK_DIR/$line"
 				fi
@@ -537,22 +547,25 @@ python_init()
 }
 repo_reset()
 {
+	mkdir -p "$REPO_PKGS_DIR"
+	cd "$REPO_PKGS_DIR"
 	for r in "${GIT_REPOS[@]}"
 	do
 		repo_dir="$(echo $r | cut -d \| -f2)"
 		if [ $DEBUG -eq 1 ];then
-			print -B "Executing repo reset with the following:"
-			print -B "repo_dir: $repo_dir"
+			print -E -B "Executing repo reset with the following:"
+			print -E -B "repo_dir: $repo_dir"
 		fi
-		if [ -d "$WORK_DIR/$repo_dir" ]; then
-			rm -rf "$VERBOSE" -- "$WORK_DIR/$repo_dir"
+		if [ -d "$REPO_PKGS_DIR/$repo_dir" ]; then
+			rm -rf "$VERBOSE" -- "$REPO_PKGS_DIR/$repo_dir"
 		else
-			[ $DEBUG -eq 1 ] && print -B "Missing $WORK_DIR/$repo_dir"
+			[ $DEBUG -eq 1 ] && print -E -B "Missing $REPO_PKGS_DIR/$repo_dir"
 		fi
 	done
 }
 python_reset()
 {
+	cd "$WORK_DIR"
 	if [ -d "$PYENV" ]; then
 		rm -rf "$VERBOSE" -- "$PYENV"
 	fi
@@ -569,13 +582,13 @@ python_reset()
 				WC=$OWC
 			else
 				WC=$(cat $WORK_DIR/$OFN | wc -l | sed -e "s/^\ *//g")
-				[ $DEBUG -eq 1 ] && print -B "$WORK_DIR/$OFN found. Line count = $WC."
+				[ $DEBUG -eq 1 ] && print -E -B "$WORK_DIR/$OFN found. Line count = $WC."
 			fi
 			if [ $OWC -ne $WC ]; then
 				print -Y "$WORK_DIR/$OFN has been modified. Retaining backups."
 				diff "$WORK_DIR/$OFN" "$WORK_DIR/backups/$line"
 			else
-				[ $DEBUG -eq 1 ] && print -B "Line count for $line ($OWC) equals line count for $OFN ($WC)"
+				[ $DEBUG -eq 1 ] && print -E -B "Line count for $line ($OWC) equals line count for $OFN ($WC)"
 				cp -f "$WORK_DIR/backups/$line" "$WORK_DIR/$OFN"
 			fi
 		done
@@ -597,44 +610,44 @@ usage()
 #### Project Specific Functions ####
 init()
 {
-	[ $DEBUG -eq 1 ] && print -B "Place custom init procedures here."
+	[ $DEBUG -eq 1 ] && print -E -B "Place custom init procedures here."
 	[ $GIT_INIT -eq 1 ] && repo_init
 	[ $PY_INIT -eq 1 ] && python_init
 }
 reset()
 {
-	[ $DEBUG -eq 1 ] && print -B "Place custom reset procedures here."
+	[ $DEBUG -eq 1 ] && print -E -B "Place custom reset procedures here."
 	[ $GIT_INIT -eq 1 ] && repo_reset
 	[ $PY_INIT -eq 1 ] && python_reset
 }
 check()
 {
-	[ $DEBUG -eq 1 ] && print -B "Place custom check procedures here."
+	[ $DEBUG -eq 1 ] && print -E -B "Place custom check procedures here."
 	[ $GIT_INIT -eq 1 ] && repo_check
 	[ $PY_INIT -eq 1 ] && python_check
 }
 failure_exit()
 {
-	print -R "Detected fatal issue. Exiting."
+	print -E -R "Detected fatal issue. Exiting."
 }
 success_exit()
 {
-	print -G "Exiting with no errors."
+	print -E -G "Exiting with no errors."
 }
 #### Main Run ####
 if [ $# -lt 1 ]; then
-	print -R "Missing arguments."
+	print -E -R "Missing arguments."
 	usage
 else
 	load_config
 	check_requirements "${REQUIRED_PKGS[@]}"
 	if [ $? -gt 0 ];then
-		print -R "Missing $? required binary package(s)."
+		print -E -R "Missing $? required binary package(s)."
 		exit 1
 	fi
 	check_requirements "${OPTIONAL_PKGS[@]}"
 	if [ $? -gt 0 ]; then
-		print -Y "Missing $? optional binary package(s). Will Skip setup procedures which require them."
+		[ $DEBUG -eq 1 ] && print -E -Y "Missing $? optional binary package(s)."
 	fi
 	while getopts "hIRCGFD" opt
 	do
@@ -651,7 +664,7 @@ else
 				QUIET="$VERBOSE"
 				;;
 			"*")
-				print -Y "Unrecognized arguments: $opt"
+				print -E -Y "Unrecognized arguments: $opt"
 				;;
 		esac
 	done
