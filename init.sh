@@ -27,8 +27,9 @@ load_config()
 {
 	if [ ! -f "$INIT_CONFIG" ];then
 		[ $DEBUG -eq 1 ] && print -E -R "Missing init config: $INIT_CONFIG"
-		return 0
+		return 1
 	fi
+	[ $DEBUG -eq 1 ] && print -E -B "Loading config from $INIT_CONFIG"
 	while read CONF_LINE
 	do
 		if [[ "${CONF_LINE:0:1}" == "#" ]] || [[ "${CONF_LINE:0:1}" == ";" ]]; then
@@ -55,20 +56,25 @@ load_config()
 			((index++))
 		done
 		IFS="$OIFS"
-		[ $DEBUG -eq 1 ] && print -E -B "index=$index;KEY=$KEY;VALUE=$VALUE"
+		if [ $DEBUG -eq 1 ]; then
+			print -E -B "Parsed the following from $CONF_LINE:"
+			print -E -B "	KEY=$KEY"
+			print -E -B "	VALUE=$VALUE"
+		fi
 		case "$KEY" in
 			"REPO" | "REPOS")
-				GIT_REPOS=( ${GIT_REPOS[@]} "$VALUE" )
+				GIT_REPOS=( ${GIT_REPOS[@]} "$(echo $VALUE | cut -d\| -f1)" )
 				GIT_INIT=1
-				REQUIRED_PKGS=( ${REQUIRED_PKGS[@]} 'git' )
 				;;
 			"PY_INIT" )
 				PY_INIT=$VALUE
-				REQUIRED_PKGS=( ${REQUIRED_PKGS[@]} 'python' 'virtualenv' )
 				;;
-				*) [ $DEBUG -eq 1 ] && print -E -B "Unrecognized Key: $KEY" ;;
+				*) [ $DEBUG -eq 1 ] && print -E -Y "Unrecognized Key: $KEY" ;;
 		esac
 	done < "$INIT_CONFIG"
+	[ $GIT_INIT -eq 1 ] && REQUIRED_PKGS=( ${REQUIRED_PKGS[@]} 'git' )
+	[ $PY_INIT -eq 1 ] && REQUIRED_PKGS=( ${REQUIRED_PKGS[@]} 'python' 'virtualenv' )
+	return 0
 }
 generate_config()
 {
@@ -216,8 +222,9 @@ print()
 	local STYLE=""
 	local POS=0
 	local RAINBOW=0
+	local RANDOM_COLOR=0
 	local ERR_OUT=0
-	while getopts "f:b:IcnpFAKRGYBPCWvS:" cprint_opt
+	while getopts "f:b:IcnpFAKRGYBPCWS:vZzE" cprint_opt
 	do
 		case "$cprint_opt" in
 			"f")					# Set foreground/text color.
@@ -269,8 +276,11 @@ print()
 			"P") [ $BOLD -eq 0 ] && FGND="$Purple" || FGND="$BPurple" ;;
 			"C") [ $BOLD -eq 0 ] && FGND="$Cyan" || FGND="$BCyan" ;;
 			"W") [ $BOLD -eq 0 ] && FGND="$White" || FGND="$BWhite";;
-			"v") DEBUG=1 ;;
 			"S") STRING="$OPTARG" ;;
+			"v") DEBUG=1 ;;
+			"Z") RANDOM_COLOR=1 ;;
+			"z") RAINBOW=1 ;;
+			"E") ERR_OUT=1 ;;
 			"*") [ $DEBUG -eq 1 ] && (>&2 echo "Unknown Arguement: $opt") ;;
 		esac
 	done
@@ -311,51 +321,51 @@ print()
 	done
 	#process_string()
 	string_proc="$STRING"
-	[ ! -z $STYLE ] && string_proc="$($STYLE $string_proc)"
-	if [ $POS -eq 0 ]; then
-		[ ! -z $BKGN ] && string_proc="$BKGN$string_proc"
-		if [ $RAINBOW -eq 1 ]; then
+	[ $RAINBOW -eq 1 ] || [ $RANDOM_COLOR -eq 1 ] && colors=( "$Red" "$Green" "$Gellow" "$Blue" "$Purple" "$Cyan" )
+	if [ $POS -eq 0 ]; then # non-centered strings
+		[ ! -z $STYLE ] && string_proc="$($STYLE $string_proc)" # Apply style
+		[ ! -z $BKGN ] && string_proc="$BKGN$string_proc" # Apply background color
+		if [ $RAINBOW -eq 0 ]; then # rainbow not invoked, so just apply the foreground
+			[ $RANDOM_COLOR -eq 1 ] && FGND="${colors[$RANDOM % ${#colors[@]}]}"
+			[ ! -z $FGND ] && string_proc="$FGND$string_proc"
+		elif [ -z $STYLE ]; then # Rainbow invoked. Only apply rainbow if not styled.
 			string_proc_r=""
 			words=($string_proc)
-			for c in "${words[@]}"
+			for c in "${words[@]}" # Loop through each word separated by spaces
 			do
-				#random_color()
-				colors=( "$Red" "$Green" "$Gellow" "$Blue" "$Purple" "$Cyan" )
 				FGND="${colors[$RANDOM % ${#colors[@]}]}"
 				[ $DEBUG -eq 1 ] && (>&2 echo "Random seed: $RANDOM")
 				string_proc_r="$string_proc_r$FGND$c "
 			done
-			string_proc=$string_proc_r
-		else
-			[ ! -z $FGND ] && string_proc="$FGND$string_proc"
+			string_proc=$string_proc_r # Assign final result back to string_proc
 		fi
 		[ ! -z $FGND ] || [ ! -z $BKGN ] && string_proc="$string_proc$NC"	# Append color reset if foreground/background is set.
-		if [ $PRINTF_E -eq 0 ]; then
-			if [ $ERR_OUT -eq 1 ]; then
+		if [ $PRINTF_E -eq 0 ]; then # if printf exists
+			if [ $ERR_OUT -eq 1 ]; then # print to stderr
 				(>&2 printf -- "$string_proc")
-			else
+			else # print to stdout
 				printf -- "$string_proc"
 			fi
-		else
+		else # printf doesn't exist
 			[ $DEBUG -eq 1 ] && (>&2 echo "printf not found, reverting to echo.")
-			if [ $ERR_OUT -eq 1 ]; then
+			if [ $ERR_OUT -eq 1 ]; then # print to stderr
 				(>&2 echo "$string_proc")
-			else
+			else # print to stdout
 				echo "$string_proc"
 			fi
 		fi
-	else
-		if [ $PRINTF_E -eq 0 ]; then
-			if [ $ERR_OUT -eq 1 ]; then
+	else # Centered strings
+		if [ $PRINTF_E -eq 0 ]; then # if printf exists
+			if [ $ERR_OUT -eq 1 ]; then # print to stderr
 				(>&2 printf -- "$FGND$BKGN%$POS"s"$NC" "$string_proc")
-			else
+			else # print to stdout
 				printf -- "$FGND$BKGN%$POS"s"$NC" "$string_proc"
 			fi
-		else
+		else # printf doesn't exist
 			[ $DEBUG -eq 1 ] && (>&2 "printf not found, reverting to echo.")
-			if [ $ERR_OUT -eq 1 ]; then
+			if [ $ERR_OUT -eq 1 ]; then # print to stderr
 				(>&2 echo "$FGND""$BKGN""$string_proc""$NC")
-			else
+			else # print to stdout
 				echo "$FGND""$BKGN""$string_proc""$NC"
 			fi
 		fi
@@ -401,12 +411,15 @@ check_requirements()
 repo_check()
 {
 	missing=0
-	for r in "${GIT_REPOS[@]}"
+	for url in "${GIT_REPOS[@]}"
 	do
+		r="$(cat $INIT_CONFIG | grep $url)"
 		repo_dir="$(echo $r | cut -d \| -f 2)"
 		if [ ! -d "$repo_dir" ]; then
 			print -E -R "Missing $repo_dir."
 			((missing++))
+		else
+			print -E -G "Found $repo_dir"
 		fi
 	done
 	if [ $missing -gt 0 ]; then
@@ -438,18 +451,19 @@ repo_init()
 {
 	mkdir -p "$REPO_PKGS_DIR"
 	git_succeed=0
-	for r in "${GIT_REPOS[@]}"
+	for url in "${GIT_REPOS[@]}"
 	do
-		cd "$REPO_PKGS_DIR"
-		repo_url="$(echo $r | cut -d \| -f1)"
+		r="$(cat $INIT_CONFIG | grep $url)"
+		repo_url="$url"
 		repo_dir="$(echo $r | cut -d \| -f2)"
 		repo_init="$(echo $r | cut -d \| -f3)"
 		if [ $DEBUG -eq 1 ];then
 			print -E -B "Executing repo init with the following: "
-			print -E -B "repo_url: $repo_url"
-			print -E -B "repo_dir: $repo_dir"
-			print -E -B "repo_init: $repo_init"
+			print -E -B "	repo_url: $repo_url"
+			print -E -B "	repo_dir: $repo_dir"
+			print -E -B "	repo_init: $repo_init"
 		fi
+		cd "$REPO_PKGS_DIR"
 		[[ "$repo_dir" == "" ]] && repo_dir="$(echo $repo_url | rev | cut -d \/ -f1 | rev)"
 		if [ -d "$repo_dir" ]; then
 			cd "$REPO_PKGS_DIR/$repo_dir"
@@ -472,6 +486,25 @@ repo_init()
 		fi
 	done
 	cd "$WORK_DIR"
+}
+repo_reset()
+{
+	mkdir -p "$REPO_PKGS_DIR"
+	cd "$REPO_PKGS_DIR"
+	for url in "${GIT_REPOS[@]}"
+	do
+		r="$(cat $INIT_CONFIG | grep $url)"
+		repo_dir="$(echo $r | cut -d \| -f2)"
+		if [ $DEBUG -eq 1 ];then
+			print -E -B "Executing repo reset with the following:"
+			print -E -B "	repo_dir: $repo_dir"
+		fi
+		if [ -d "$REPO_PKGS_DIR/$repo_dir" ]; then
+			rm -rf "$VERBOSE" -- "$REPO_PKGS_DIR/$repo_dir"
+		else
+			[ $DEBUG -eq 1 ] && print -E -B "Missing $REPO_PKGS_DIR/$repo_dir"
+		fi
+	done
 }
 python_check()
 {
@@ -521,78 +554,25 @@ python_init()
 		"$PYENV/bin/pip" "$QUIET" install -r "$PIP_TXT"
 		if [ $? -eq 0 ]; then
 			touch "$PYENV/updated"
-			print -E -G "Requirements installed."
+			print -E -G "Python requirements installed."
 		else
-			print -E -R "Requirements not installed."
+			print -E -R "Python requirements not installed."
 			exit 1
 		fi
-		PY_PATH="$WORK_DIR/$PYENV_NAME/bin/python"
-		if [ ! -d "$WORK_DIR/backups" ]; then
-			mkdir -p "$WORK_DIR/backups"
-		fi
-		ls "$WORK_DIR" | while read line
-		do
-			if [ -f "$WORK_DIR/$line" ]; then
-				if [[ "$(head -1 "$WORK_DIR/$line")" == "#!/usr/bin/python" ]]; then
-					print -E -Y "Detected python file, modifiying shebang to $PY_PATH"
-					WC=$(cat $WORK_DIR/$line | wc -l | sed -e "s/^\ *//g")
-					sed -i.$RUN_DATE.$WC "1s|.*|\#\!$PY_PATH|g" "$WORK_DIR/$line"
-					print -E -Y "Storing backup to $WORK_DIR/backups/$line.$RUN_DATE.$WC"
-					mv -f "$WORK_DIR/$line.$RUN_DATE.$WC" "$WORK_DIR/backups/"
-					chmod +x "$WORK_DIR/$line"
-				fi
-			fi
-		done
+		PY_ACTIVATE="$WORK_DIR/$PYENV_NAME/bin/activate"
+		PY_ENV_ALIAS="PY-ENV-""$(echo $WORK_DIR | rev | cut -d / -f1 | rev)"
+		print -E -G "Manually Activate python virtual environment: source $PY_ACTIVATE"
+		print -E -G "Or add the following alias to your configuration:"
+		print -E -G "alias $PY_ENV_ALIAS=\'source $PY_ACTIVATE\'"
+		print -E -G "Or overrride python binary by adding the following alias to your environment:"
+		print -E -G "alias python=\'$WORK_DIR/$PYENV_NAME/bin/python\'"
 	fi
-}
-repo_reset()
-{
-	mkdir -p "$REPO_PKGS_DIR"
-	cd "$REPO_PKGS_DIR"
-	for r in "${GIT_REPOS[@]}"
-	do
-		repo_dir="$(echo $r | cut -d \| -f2)"
-		if [ $DEBUG -eq 1 ];then
-			print -E -B "Executing repo reset with the following:"
-			print -E -B "repo_dir: $repo_dir"
-		fi
-		if [ -d "$REPO_PKGS_DIR/$repo_dir" ]; then
-			rm -rf "$VERBOSE" -- "$REPO_PKGS_DIR/$repo_dir"
-		else
-			[ $DEBUG -eq 1 ] && print -E -B "Missing $REPO_PKGS_DIR/$repo_dir"
-		fi
-	done
 }
 python_reset()
 {
 	cd "$WORK_DIR"
-	if [ -d "$PYENV" ]; then
-		rm -rf "$VERBOSE" -- "$PYENV"
-	fi
-	if [ -d "$WORK_DIR/backups" ];then
-		ls "$WORK_DIR/backups" | while read line
-		do
-			OWC="$(echo $line | rev | cut -d . -f1 | rev)"
-			FDATE="$(echo $line | rev | cut -d . -f2 | rev)"
-			OFN="${line/.$OWC/}"
-			OFN="${OFN/.$FDATE/}"
-			[ $DEBUG -eq 1 ] && echo "$WORK_DIR/backups/$line line count = $OWC. Old file name: $OFN"
-			if [ ! -f $WORK_DIR/$OFN ]; then
-				print -R "$WORK_DIR/$OFN is missing! Restoring from backups."
-				WC=$OWC
-			else
-				WC=$(cat $WORK_DIR/$OFN | wc -l | sed -e "s/^\ *//g")
-				[ $DEBUG -eq 1 ] && print -E -B "$WORK_DIR/$OFN found. Line count = $WC."
-			fi
-			if [ $OWC -ne $WC ]; then
-				print -Y "$WORK_DIR/$OFN has been modified. Retaining backups."
-				diff "$WORK_DIR/$OFN" "$WORK_DIR/backups/$line"
-			else
-				[ $DEBUG -eq 1 ] && print -E -B "Line count for $line ($OWC) equals line count for $OFN ($WC)"
-				cp -f "$WORK_DIR/backups/$line" "$WORK_DIR/$OFN"
-			fi
-		done
-	fi
+	rm -rf "$VERBOSE" -- "$PYENV"
+	rm -rf "$VERBOSE" -- "*.pyc"
 }
 usage()
 {
@@ -610,63 +590,64 @@ usage()
 #### Project Specific Functions ####
 init()
 {
-	[ $DEBUG -eq 1 ] && print -E -B "Place custom init procedures here."
+	# Add custom init commands here.
 	[ $GIT_INIT -eq 1 ] && repo_init
 	[ $PY_INIT -eq 1 ] && python_init
 }
 reset()
 {
-	[ $DEBUG -eq 1 ] && print -E -B "Place custom reset procedures here."
+	# Add custom reset commands here.
 	[ $GIT_INIT -eq 1 ] && repo_reset
 	[ $PY_INIT -eq 1 ] && python_reset
 }
 check()
 {
-	[ $DEBUG -eq 1 ] && print -E -B "Place custom check procedures here."
+	# Add custom check commands here.
 	[ $GIT_INIT -eq 1 ] && repo_check
 	[ $PY_INIT -eq 1 ] && python_check
 }
 failure_exit()
 {
-	print -E -R "Detected fatal issue. Exiting."
+	print -E -R "$0: Detected fatal issue. Exiting."
 }
 success_exit()
 {
-	print -E -G "Exiting with no errors."
+	print -E -G "$0: Exiting with no errors."
 }
 #### Main Run ####
 if [ $# -lt 1 ]; then
 	print -E -R "Missing arguments."
 	usage
 else
-	load_config
-	check_requirements "${REQUIRED_PKGS[@]}"
-	if [ $? -gt 0 ];then
-		print -E -R "Missing $? required binary package(s)."
-		exit 1
-	fi
-	check_requirements "${OPTIONAL_PKGS[@]}"
-	if [ $? -gt 0 ]; then
-		[ $DEBUG -eq 1 ] && print -E -Y "Missing $? optional binary package(s)."
-	fi
+	INIT_FLAG=0
+	RESET_FLAG=0
+	CHECK_FLAG=0
+	GENERATE_FLAG=0
 	while getopts "hIRCGFD" opt
 	do
 		case "$opt" in
 			"h") usage ;;
-			"I") init ;;
-			"R") reset ;;
-			"C") check ;;
-			"G") generate_config ;;
+			"I") INIT_FLAG=1 ;;
+			"R") RESET_FLAG=1 ;;
+			"C") CHECK_FLAG=1 ;;
+			"G") GENERATE_FLAG=1 ;;
 			"F") FORCE_FLAG=1 ;;
 			"D")
 				DEBUG=1
 				VERBOSE="-v"
 				QUIET="$VERBOSE"
 				;;
-			"*")
-				print -E -Y "Unrecognized arguments: $opt"
-				;;
+			"*") print -E -Y "Unrecognized arguments: $opt" ;;
 		esac
 	done
+	[ $GENERATE_FLAG -eq 1 ] && generate_config
+	load_config
+	check_requirements "${REQUIRED_PKGS[@]}"
+	[ $? -gt 0 ] && print -E -R "Missing $? required binary package(s)." && exit 1
+	check_requirements "${OPTIONAL_PKGS[@]}"
+	[ $? -gt 0 ] && [ $DEBUG -eq 1 ] && print -E -Y "Missing $? optional binary package(s)."
+	[ $INIT_FLAG -eq 1 ] && init
+	[ $RESET_FLAG -eq 1 ] && reset
+	[ $CHECK_FLAG -eq 1 ] && check
 fi
 exit 0
