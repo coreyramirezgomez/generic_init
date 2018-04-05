@@ -12,13 +12,12 @@ VERBOSE=""
 QUIET="-q"
 FORCE_FLAG=0
 REQUIRED_PKGS=( 'cut' 'rev' )
-OPTIONAL_PKGS=( )
-GIT_REPOS=( )
-REPO_PKGS_DIR="$WORK_DIR/"
+OPTIONAL_PKGS=()
+GIT_REPOS=()
+REPO_PKGS_DIR="$WORK_DIR"
 PY_INIT=0
 GIT_INIT=0
-PYENV_NAME="pyenv"
-PYENV="$WORK_DIR/$PYENV_NAME"
+PYENV="$WORK_DIR/pyenv"
 PIP_TXT="$WORK_DIR/requirements.txt"
 INIT_CONFIG="$WORK_DIR/init.ini"
 RUN_DATE=$(date +%Y-%d-%m-%H-%M-%S)
@@ -546,9 +545,8 @@ python_check()
 }
 python_init()
 {
-	cd "$WORK_DIR"
 	if [ ! -d "$PYENV" ]; then
-		virtualenv "$QUIET" "$PYENV_NAME"
+		virtualenv "$QUIET" "$PYENV"
 	fi
 	if [ ! -f "$PYENV/updated" ] ||  [ "$PIP_TXT" -nt "$PYENV/updated" ]; then
 		"$PYENV/bin/pip" "$QUIET" install -r "$PIP_TXT"
@@ -559,20 +557,17 @@ python_init()
 			print -E -R "Python requirements not installed."
 			exit 1
 		fi
-		PY_ACTIVATE="$WORK_DIR/$PYENV_NAME/bin/activate"
-		PY_ENV_ALIAS="PY-ENV-""$(echo $WORK_DIR | rev | cut -d / -f1 | rev)"
+		PY_ACTIVATE="$PYENV/bin/activate"
 		print -E -G "Manually Activate python virtual environment: source $PY_ACTIVATE"
-		print -E -G "Or add the following alias to your configuration:"
-		print -E -G "alias $PY_ENV_ALIAS=\'source $PY_ACTIVATE\'"
 		print -E -G "Or overrride python binary by adding the following alias to your environment:"
-		print -E -G "alias python=\'$WORK_DIR/$PYENV_NAME/bin/python\'"
+		print -E -G "alias python=\'$PYENV/bin/python\'"
 	fi
 }
 python_reset()
 {
 	cd "$WORK_DIR"
 	rm -rf "$VERBOSE" -- "$PYENV"
-	rm -rf "$VERBOSE" -- "*.pyc"
+	rm -f "$VERBOSE" -- "*.pyc"
 }
 usage()
 {
