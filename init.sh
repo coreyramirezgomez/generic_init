@@ -565,9 +565,8 @@ python_init()
 }
 python_reset()
 {
-	cd "$WORK_DIR"
-	rm -rf "$VERBOSE" -- "$PYENV"
-	rm -f "$VERBOSE" -- "*.pyc"
+	rm -rf "$VERBOSE" "$PYENV"
+	find "$WORK_DIR" -type f -iname "*.pyc" -exec rm -f "$VERBOSE" {} \;
 }
 usage()
 {
