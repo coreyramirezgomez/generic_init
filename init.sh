@@ -19,6 +19,7 @@ PY_INIT=0
 GIT_INIT=0
 PYENV="$WORK_DIR/pyenv"
 PIP_TXT="$WORK_DIR/requirements.txt"
+PIP_PKGS=()
 INIT_CONFIG="$WORK_DIR/init.ini"
 RUN_DATE=$(date +%Y-%d-%m-%H-%M-%S)
 #### Functions ####
@@ -68,11 +69,23 @@ load_config()
 			"PY_INIT" )
 				PY_INIT=$VALUE
 				;;
+			"PIP_PACKAGE") PIP_PKGS=( ${PIP_PKGS[@]} "$VALUE" ) ;;
 				*) [ $DEBUG -eq 1 ] && print -E -Y "Unrecognized Key: $KEY" ;;
 		esac
 	done < "$INIT_CONFIG"
 	[ $GIT_INIT -eq 1 ] && REQUIRED_PKGS=( ${REQUIRED_PKGS[@]} 'git' )
 	[ $PY_INIT -eq 1 ] && REQUIRED_PKGS=( ${REQUIRED_PKGS[@]} 'python' 'virtualenv' )
+	if [ $PY_INIT -eq 1 ] && [ ${#PIP_PKGS[@]} -gt 0 ]; then
+		for pkg in "${PIP_PKGS[@]}"
+		do
+			if [ -f "$PIP_TXT" ]; then
+				cat "$PIP_TXT" | grep -q "$pkg"
+				[ $? -ne 0 ] && echo "$pkg" >> "$PIP_TXT"
+			else
+				echo "$pkg" >> "$PIP_TXT"
+			fi
+		done
+	fi
 	return 0
 }
 generate_config()
@@ -83,29 +96,58 @@ generate_config()
 		mv -f "$INIT_CONFIG" "$INIT_CONFIG.$RUN_DATE"
 	fi
 	touch "$INIT_CONFIG"
-	KEYS=( "REPO" "PY_INIT" )
+	KEYS=( "REPO" "PY_INIT" "PIP_PACKAGE" )
 	for k in "${KEYS[@]}"
 	do
 		INPUT=""
 		print -B -S "---------------- $k ----------------"
+		echo "" >> "$INIT_CONFIG"
+		echo "# ---------------- $k ---------------- #" >> "$INIT_CONFIG"
 		case "$k" in
 			"REPO")
+				echo "# REPO=REPO-URL|REPO-DIR|REPO-INIT" >> "$INIT_CONFIG"
+				echo "# REPO-URL: can be git or https, if login is required, you will be prompted during init proces." >> "$INIT_CONFIG"
+				echo "# REPO-DIR: Destination directory for cloning. All clones will go into $WORK_DIR" >> "$INIT_CONFIG"
+				echo "# REPO-PIP: Will add the REPO-DIR as a local pip package to be installed. Adds to config by PIP_PACKAGE=$WORK_DIR/REPO-DIR" >> "$INIT_CONFIG"
 				while :
 				do
 					print -Y -n "Set repo-url to clone (Leave blank to continue): "
 					read INPUT
 					if [[ "$INPUT" != "" ]];then
 						repo_url="$INPUT"
+						INPUT=""
 						print -B -S "---------------- REPO-DIR ----------------"
-						repo_dir="$(echo $INPUT | rev | cut -d \/ -f1 | rev)"
+						repo_dir="$(echo $repo_url | rev | cut -d \/ -f1 | rev)"
 						print -Y -n "Set directory to clone repo to (Leave blank for default=$repo_dir): "
 						read INPUT
 						[[ "$INPUT" != "" ]] && repo_dir="$INPUT"
+						INPUT=""
 						print -B -S "---------------- REPO-INIT ----------------"
 						repo_init=""
 						print -Y -n "Set the init command (Ex: init.sh -I) (Leave blank to skip): "
 						read INPUT
 						[[ "$INPUT" != "" ]] && repo_init="$INPUT"
+						INPUT=""
+						print -B -S "---------------- REPO-PIP ----------------"
+						[ $FORCE_FLAG -eq 1 ] && INPUT="y"
+						while :
+						do
+							case "$INPUT" in
+								"N" | "n")
+									break
+									;;
+								"Y" | "y")
+									echo "PIP_PACKAGE=$WORK_DIR/$repo_dir" >> "$INIT_CONFIG"
+									break
+									;;
+								*)
+									print -Y -n "Is this a pip package that you want installed? (Y/[N]): "
+									read -n 1 INPUT
+									echo ""
+									[[ "$INPUT" == "" ]] && INPUT="n"
+									;;
+								esac
+						done
 						echo "$k=$repo_url|$repo_dir|$repo_init" >> "$INIT_CONFIG"
 					else
 						break
@@ -113,6 +155,8 @@ generate_config()
 				done
 				;;
 			"PY_INIT")
+				echo "# set $k=0 to skip creating $PYENV with virtualenv. This is the default." >> "$INIT_CONFIG"
+				echo "# set $k=1 to create $PYENV with virtualenv." >> "$INIT_CONFIG"
 				[ $FORCE_FLAG -eq 1 ] && INPUT="y"
 				while :
 				do
@@ -133,8 +177,28 @@ generate_config()
 						esac
 				done
 				;;
+			"PIP_PACKAGE")
+				echo "# Optionally specifiy pip packages to install locally with virtualenv." >> "$INIT_CONFIG"
+				echo "# If one of the git repos is designated as a pip repo, then it's corresponding PIP_PACKAGE will be added near the same line." >> "$INIT_CONFIG"
+				echo "# Examples: " >> "$INIT_CONFIG"
+				echo "# PIP_PACKAGE=isort" >> "$INIT_CONFIG"
+				echo "# PIP_PACKAGE=requests==1.0" >> "$INIT_CONFIG"
+				echo "# PIP_PACKAGE=https://github.com/some_cool_module.git" >> "$INIT_CONFIG"
+				echo "# PIP_PACKAGE=/Absolute/path/to/local/package" >> "$INIT_CONFIG"
+				while :
+				do
+					print -Y -n -S "Add a pip package to install (Ex: isort==4.3.4) (Leave blank to skip): "
+					read INPUT
+					if [[ "$INPUT" != "" ]]; then
+						echo "$k=$INPUT" >> "$INIT_CONFIG"
+					else
+						break
+					fi
+				done
+				;;
 		esac
 	done
+	echo "# $0 generated config on $RUN_DATE @ $INIT_CONFIG" >> "$INIT_CONFIG"
 }
 print()
 {
