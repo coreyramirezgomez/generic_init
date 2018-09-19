@@ -106,8 +106,8 @@ generate_config()
 		case "$k" in
 			"REPO")
 				echo "# REPO=REPO-URL|REPO-DIR|REPO-INIT" >> "$INIT_CONFIG"
-				echo "# REPO-URL: can be git or https, if login is required, you will be prompted during init proces." >> "$INIT_CONFIG"
-				echo "# REPO-DIR: Destination directory for cloning. All clones will go into $WORK_DIR" >> "$INIT_CONFIG"
+				echo "# REPO-URL: can be git or https, if login is required, you will be prompted during init process." >> "$INIT_CONFIG"
+				echo "# REPO-DIR: Destination directory for cloning. default: $WORK_DIR" >> "$INIT_CONFIG"
 				echo "# REPO-PIP: Will add the REPO-DIR as a local pip package to be installed. Adds to config by PIP_PACKAGE=$WORK_DIR/REPO-DIR" >> "$INIT_CONFIG"
 				while :
 				do
@@ -198,6 +198,7 @@ generate_config()
 				;;
 		esac
 	done
+	echo "" >> "INIT_CONFIG"
 	echo "# $0 generated config on $RUN_DATE @ $INIT_CONFIG" >> "$INIT_CONFIG"
 }
 print()
